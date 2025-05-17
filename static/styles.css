@@ -1,0 +1,16 @@
+textarea {
+    vertical-align: bottom;
+}
+#output {
+    font-family: monospace;
+    overflow: auto;
+}
+#output > p {
+    overflow-wrap: break-word;
+}
+#output span {
+    color: blue;
+}
+#output span.error {
+    color: red;
+}
