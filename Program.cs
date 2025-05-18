@@ -6,40 +6,55 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 
-public enum EOpcodeType {
-    // Denotes a continuation code
-    Fragment = 0,
-    // Denotes a text code
-    Text = 1,
-    // Denotes a binary code
-    Binary = 2,
-    // Denotes a closed connection
-    ClosedConnection = 8,
-    // Denotes a ping
-    Ping = 9,
-    // Denotes a pong
-    Pong = 10
+class Program {
+    public static void Main() {
+        Server server = new Server(new ServerConfig(IP: "127.0.0.1", Port: 1234));
+        server.Start();
+    }
 }
 
-public record Config(
-    string Ip,
+public record ServerConfig(
+    string IP,
     int Port
 );
 
-class Server {
-    public static void Main() {
-        Config config = new Config(Ip: "127.0.0.1", Port: 1234);
+public class Server {
+    private enum EOpcodeType {
+        // Denotes a continuation code
+        Fragment = 0,
+        // Denotes a text code
+        Text = 1,
+        // Denotes a binary code
+        Binary = 2,
+        // Denotes a closed connection
+        ClosedConnection = 8,
+        // Denotes a ping
+        Ping = 9,
+        // Denotes a pong
+        Pong = 10
+    }
 
-        TcpListener server = new TcpListener(
-            IPAddress.Parse(config.Ip),
-            config.Port
+    private ServerConfig serverConfig;
+    public ServerConfig ServerConfig => serverConfig;
+
+    public Server(ServerConfig serverConfig) {
+        this.serverConfig = serverConfig;
+    }
+
+    public void Start() {
+        TcpListener tcpServer = new TcpListener(
+            IPAddress.Parse(this.serverConfig.IP),
+            this.serverConfig.Port
         );
 
-        server.Start();
+        tcpServer.Start();
 
-        Console.WriteLine("@ server started");
+        Console.WriteLine(
+            "@ server started at {0}",
+            this.serverConfig.IP + ":" + this.serverConfig.Port.ToString()
+        );
 
-        TcpClient client = server.AcceptTcpClient();
+        TcpClient client = tcpServer.AcceptTcpClient();
         NetworkStream stream = client.GetStream();
 
         while (true) {
@@ -56,15 +71,19 @@ class Server {
                 continue;
             }
 
-            string decodedMessage = Server.HandleMessage(clientBytes);
-            Console.WriteLine("@ incoming message: {0}", decodedMessage);
+            (string decodedMessage, int messageType) = Server.HandleMessage(clientBytes);
+            Console.WriteLine(
+                "@ incoming message<{0}>: {1}",
+                Enum.GetName(typeof(EOpcodeType), messageType),
+                decodedMessage
+            );
 
             byte[] send = Server.SendMessage(decodedMessage + "!");
             stream.Write(send, 0, send.Length);
         }
     }
 
-    private static string HandleMessage(byte[] clientBytes) {
+    private static (string decodedMessage, int messageType) HandleMessage(byte[] clientBytes) {
         // Base Framing Protocol
         // https://datatracker.ietf.org/doc/html/rfc6455#section-5.2
 
@@ -170,15 +189,19 @@ class Server {
         // i modulo 4 of the masking key ("masking-key-octet-j"):
         //      j                   = i MOD 4
         //      transformed-octet-i = original-octet-i XOR masking-key-octet-j
+        //
         for (ulong i = 0; i < messageLength; ++i)
             decodedMessageBuffer[i] = (byte)(clientBytes[offset + i] ^ maskingKey[i % 4]);
 
         string decodedMessage = Encoding.UTF8.GetString(decodedMessageBuffer);
-        return decodedMessage;
+
+        return (decodedMessage: decodedMessage, messageType: opcode);
     }
 
-    private static byte[] SendMessage(string message, EOpcodeType opcode = EOpcodeType.Text)
-    {
+    private static byte[] SendMessage(
+        string message,
+        EOpcodeType opcode = EOpcodeType.Text
+    ) {
         byte[] response;
         byte[] bytesRaw = Encoding.Default.GetBytes(message);
         byte[] frame = new byte[10];
@@ -227,7 +250,10 @@ class Server {
         return response;
     }
 
-    private static (ulong offset, ulong messageLength) DetermineMessageLength(ulong payloadLength, IEnumerable<byte> clientBytes) {
+    private static (ulong offset, ulong messageLength) DetermineMessageLength(
+        ulong payloadLength,
+        IEnumerable<byte> clientBytes
+    ) {
         if (payloadLength >= 0 && payloadLength <= 125) return (offset: 2, messageLength: payloadLength);
 
         if (payloadLength == 126) {
@@ -259,9 +285,9 @@ class Server {
         // pieces of information and combine them to form a response.  The first
         // piece of information comes from the |Sec-WebSocket-Key| header field
         // in the client handshake:
-
+        //
         //      Sec-WebSocket-Key
-
+        //
         // For this header field, the server has to take the value (as present
         // in the header field, e.g., the base64-encoded [RFC4648] version minus
         // any leading and trailing whitespace) and concatenate this with the
@@ -278,7 +304,7 @@ class Server {
         byte[] swkAndSaltSha1 = System.Security.Cryptography.SHA1.Create()
             .ComputeHash(Encoding.UTF8.GetBytes(swkAndSalt));
         string acceptedHash = Convert.ToBase64String(swkAndSaltSha1);
-        
+
         byte[] response = Encoding.UTF8.GetBytes(
             "HTTP/1.1 101 Switching Protocols" + endOfLineMarker
             + "Connection: Upgrade" + endOfLineMarker
