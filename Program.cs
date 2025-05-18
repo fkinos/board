@@ -37,8 +37,11 @@ public class Server {
     private ServerConfig serverConfig;
     public ServerConfig ServerConfig => serverConfig;
 
+    private Dictionary<string, TcpClient> connectedClients;
+
     public Server(ServerConfig serverConfig) {
         this.serverConfig = serverConfig;
+        this.connectedClients = new Dictionary<string, TcpClient>();
     }
 
     public void Start() {
@@ -62,6 +65,9 @@ public class Server {
 
     private void HandleClient(TcpClient client) {
         string clientEndPoint = client.Client.RemoteEndPoint.ToString();
+
+        if (!this.connectedClients.ContainsKey(clientEndPoint))
+            this.connectedClients.Add(clientEndPoint, client);
 
         Console.WriteLine("@ new connection at {0}", clientEndPoint);
 
@@ -89,8 +95,15 @@ public class Server {
                 decodedMessage
             );
 
-            byte[] send = Server.SendMessage(decodedMessage + "!");
-            stream.Write(send, 0, send.Length);
+            // broadcast current client to other clients
+            foreach (var (key, c) in this.connectedClients) {
+                if (key == clientEndPoint) {
+                    continue;
+                }
+
+                byte[] send = Server.SendMessage(decodedMessage);
+                c.GetStream().Write(send, 0, send.Length);
+            }
         }
     }
 
