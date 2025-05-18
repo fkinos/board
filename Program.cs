@@ -54,7 +54,17 @@ public class Server {
             this.serverConfig.IP + ":" + this.serverConfig.Port.ToString()
         );
 
-        TcpClient client = tcpServer.AcceptTcpClient();
+        while (true) {
+            TcpClient client = tcpServer.AcceptTcpClient();
+            Task.Run(() => HandleClient(client));
+        }
+    }
+
+    private void HandleClient(TcpClient client) {
+        string clientEndPoint = client.Client.RemoteEndPoint.ToString();
+
+        Console.WriteLine("@ new connection at {0}", clientEndPoint);
+
         NetworkStream stream = client.GetStream();
 
         while (true) {
@@ -73,7 +83,8 @@ public class Server {
 
             (string decodedMessage, int messageType) = Server.HandleMessage(clientBytes);
             Console.WriteLine(
-                "@ incoming message<{0}>: {1}",
+                "@ {0}<{1} Message>: {2}",
+                clientEndPoint,
                 Enum.GetName(typeof(EOpcodeType), messageType),
                 decodedMessage
             );
