@@ -1,15 +1,55 @@
-﻿using System.Net.Sockets;
+﻿using System;
+using System.Linq;
+using System.Collections.Generic;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Collections.Generic;
-using System.Linq;
-using System;
+using System.Net.Sockets;
 
 class Program {
     public static void Main() {
         Server server = new Server(new ServerConfig(IP: "127.0.0.1", Port: 1234));
-        server.Start();
+        server.Start((Connection conn, string message, Server.EOpcodeType messageType) => {
+            Response res = new Response(
+                identifier: conn.Identifier,
+                messageType: messageType,
+                topic: "messaging",
+                message: message
+            );
+            string jsonResponse = JsonSerializer.Serialize(res);
+
+            foreach ((Guid id, Connection c) in server.Connections) {
+                if (conn.Identifier == id) continue;
+                c.Write(jsonResponse);
+            }
+
+            return true;
+        });
+    }
+}
+
+public record Response(
+    Guid identifier,
+    Server.EOpcodeType messageType,
+    string topic,
+    string message
+);
+
+public class Connection {
+    private TcpClient tcpClient;
+
+    private Guid identifier;
+    public Guid Identifier => identifier;
+
+    public Connection(TcpClient tcpClient) {
+        this.tcpClient = tcpClient;
+        this.identifier = Guid.NewGuid();
+    }
+
+    public void Write(string message) {
+        byte[] response = Server.SendMessage(message);
+        this.tcpClient.GetStream().Write(response, 0, response.Length);
     }
 }
 
@@ -19,7 +59,7 @@ public record ServerConfig(
 );
 
 public class Server {
-    private enum EOpcodeType {
+    public enum EOpcodeType : int {
         // Denotes a continuation code
         Fragment = 0,
         // Denotes a text code
@@ -37,14 +77,15 @@ public class Server {
     private ServerConfig serverConfig;
     public ServerConfig ServerConfig => serverConfig;
 
-    private Dictionary<string, TcpClient> connectedClients;
+    private Dictionary<Guid, Connection> connections;
+    public Dictionary<Guid, Connection> Connections => connections;
 
     public Server(ServerConfig serverConfig) {
         this.serverConfig = serverConfig;
-        this.connectedClients = new Dictionary<string, TcpClient>();
+        this.connections = new Dictionary<Guid, Connection>();
     }
 
-    public void Start() {
+    public void Start(Func<Connection, string, EOpcodeType, bool> handler) {
         TcpListener tcpServer = new TcpListener(
             IPAddress.Parse(this.serverConfig.IP),
             this.serverConfig.Port
@@ -59,24 +100,27 @@ public class Server {
 
         while (true) {
             TcpClient client = tcpServer.AcceptTcpClient();
-            Task.Run(() => HandleClient(client));
+            Task.Run(() => HandleClient(client, handler));
         }
     }
 
-    private void HandleClient(TcpClient client) {
-        string clientEndPoint = client.Client.RemoteEndPoint.ToString();
+    private void HandleClient(
+        TcpClient tcpClient,
+        Func<Connection, string, EOpcodeType, bool> handler
+    ) {
+        Connection conn = new Connection(tcpClient);
 
-        if (!this.connectedClients.ContainsKey(clientEndPoint))
-            this.connectedClients.Add(clientEndPoint, client);
+        if (!this.connections.ContainsKey(conn.Identifier))
+            this.connections.Add(conn.Identifier, conn);
 
-        Console.WriteLine("@ new connection at {0}", clientEndPoint);
+        Console.WriteLine("@ new connection {0}", conn.Identifier);
 
-        NetworkStream stream = client.GetStream();
+        NetworkStream stream = tcpClient.GetStream();
 
         while (true) {
             while (!stream.DataAvailable);
 
-            byte[] clientBytes = new byte[client.Available];
+            byte[] clientBytes = new byte[tcpClient.Available];
             stream.Read(clientBytes, 0, clientBytes.Length);
             string clientMessage = Encoding.UTF8.GetString(clientBytes);
 
@@ -87,27 +131,12 @@ public class Server {
                 continue;
             }
 
-            (string decodedMessage, int messageType) = Server.HandleMessage(clientBytes);
-            Console.WriteLine(
-                "@ {0}<{1} Message>: {2}",
-                clientEndPoint,
-                Enum.GetName(typeof(EOpcodeType), messageType),
-                decodedMessage
-            );
-
-            // broadcast current client to other clients
-            foreach (var (key, c) in this.connectedClients) {
-                if (key == clientEndPoint) {
-                    continue;
-                }
-
-                byte[] send = Server.SendMessage(decodedMessage);
-                c.GetStream().Write(send, 0, send.Length);
-            }
+            (string decodedMessage, EOpcodeType messageType) = Server.HandleMessage(clientBytes);
+            handler(conn, decodedMessage, messageType);
         }
     }
 
-    private static (string decodedMessage, int messageType) HandleMessage(byte[] clientBytes) {
+    private static (string decodedMessage, EOpcodeType messageType) HandleMessage(byte[] clientBytes) {
         // Base Framing Protocol
         // https://datatracker.ietf.org/doc/html/rfc6455#section-5.2
 
@@ -219,10 +248,10 @@ public class Server {
 
         string decodedMessage = Encoding.UTF8.GetString(decodedMessageBuffer);
 
-        return (decodedMessage: decodedMessage, messageType: opcode);
+        return (decodedMessage: decodedMessage, messageType: (EOpcodeType)opcode);
     }
 
-    private static byte[] SendMessage(
+    public static byte[] SendMessage(
         string message,
         EOpcodeType opcode = EOpcodeType.Text
     ) {
