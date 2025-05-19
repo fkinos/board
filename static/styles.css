@@ -14,3 +14,8 @@ textarea {
 #output span.error {
     color: red;
 }
+
+.nickname {
+    display: inline-block;
+    text-align: right;
+}

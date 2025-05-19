@@ -1,6 +1,10 @@
 const wsUri = "ws://localhost:1234";
 const websocket = new WebSocket(wsUri);
 
+let connectionState = {
+  connected: false,
+};
+
 const MessageType = {
   // Denotes a continuation code
   Fragment: 0,
@@ -23,39 +27,68 @@ const getKeyByValue = (object, value) => {
 function writeToScreen(message) {
   const text = document.createElement('p');
   text.innerText = message;
-  output.insertAdjacentElement('afterbegin', text);
+  output.appendChild(text);
 }
 
 websocket.addEventListener('open', (_event) => {
-  writeToScreen("connected");
+  connectionState.connected = true;
 });
 
 websocket.addEventListener('close', (_event) => {
-  writeToScreen("disconnected");
+  connectionState.connected = false;
 });
 
 websocket.addEventListener('message', (event) => {
   const response = JSON.parse(event.data);
-  writeToScreen(`<${response.identifier.slice(0, 8)}>: ${response.message}`);
+
+  console.info('@ response', event, response);
+
+  writeToScreen(`<${response.nickname ? response.nickname : response.identifier.slice(0, 8)}>: ${response.message}`);
 });
 
 websocket.addEventListener('error', (event) => {
-  writeToScreen(`error: ${event.data}`);
+  console.error(event);
 });
 
 const button = document.querySelector("button");
 const output = document.querySelector("#output");
-const input = document.querySelector("input");
+const input = document.querySelector(".input");
+const nicknameInput = document.querySelector(".nickname");
 
-function doSend(message) {
-  writeToScreen(`\<you\>: ${message}`);
-  websocket.send(message);
+function doSend(connectionState, message) {
+  if (!connectionState.connected) {
+    alert("Not connected to the server");
+    return;
+  }
+
+  const nickname = nicknameInput.value;
+
+  const request = {
+    nickname: nickname ? nickname : '',
+    messageType: MessageType.Text,
+    message: message,
+  }
+
+  console.info('@ request', request);
+
+  websocket.send(JSON.stringify(request));
+
+  writeToScreen(`\<${request.nickname ? request.nickname : 'you'}>: ${request.message}`);
 }
 
 function onClickButton() {
   const text = input.value;
-  text && doSend(text);
+  text && doSend(connectionState, text);
   input.value = "";
 }
 
 button.addEventListener("click", onClickButton);
+input.addEventListener("keydown", (event) => {
+  const keyCode = event.code;
+
+  if (keyCode !== 'Enter') return;
+
+  const text = input.value;
+  text && doSend(connectionState, text);
+  input.value = '';
+})

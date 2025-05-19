@@ -4,8 +4,15 @@ using System.Net.Sockets;
 
 public record Response(
     Guid identifier,
+    string nickname,
     EOpcodeType messageType,
     string topic,
+    string message
+);
+
+public record Request(
+    string nickname,
+    EOpcodeType messageType,
     string message
 );
 
@@ -30,11 +37,14 @@ class Program {
     public static void Main() {
         Server server = new Server(new ServerConfig(IP: "127.0.0.1", Port: 1234));
         server.Start((Connection conn, string message, EOpcodeType messageType) => {
+            Request? request = JsonSerializer.Deserialize<Request>(message);
+
             Response res = new Response(
                 identifier: conn.Identifier,
-                messageType: messageType,
+                nickname: request?.nickname ?? conn.Identifier.ToString(),
+                messageType: request?.messageType ?? EOpcodeType.Text,
                 topic: "messaging",
-                message: message
+                message: request?.message ?? ""
             );
             string jsonResponse = JsonSerializer.Serialize(res);
 
