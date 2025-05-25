@@ -1,19 +1,42 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
-    <title>Board</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="assets/favicon.png" />
+    <title>Mensageria - Integra Tietê</title>
     <link href="./styles.css" rel="stylesheet" />
   </head>
   <body>
     <main>
-      <h1>Board</h1>
+      <header>
+        <div class="logo-container">
+          <img src="./assets/IntegraTiete-1.png" alt="Logo" class="logo" />
+          <h1>Mensageria - Equipe SP</h1>
+        </div>
+      </header>
 
-      <div id="output"></div>
+      <div class="chat-container">
+        <div id="connection-status" class="disconnected">Conectando...</div>
+        <div id="output" class="message-container"></div>
 
-      <input class="nickname" type="text" placeholder="nickname">:
-      <input class="input" type="text" placeholder="message">
-      <button>send</button>
+        <div class="input-group">
+          <input
+            class="nickname"
+            type="text"
+            placeholder="Seu nome"
+            aria-label="Seu nome"
+          />
+          <input
+            class="input"
+            type="text"
+            placeholder="Digite sua mensagem"
+            aria-label="Mensagem"
+          />
+          <button type="button" aria-label="Enviar">Enviar</button>
+        </div>
+      </div>
     </main>
+    <script src="./main.js"></script>
   </body>
-  <script src="./main.js"></script>
 </html>
