@@ -121,7 +121,7 @@ h1 {
 .message {
   padding: 14px 18px;
   border-radius: 14px;
-  max-width: 85%;
+  max-width: max-content;
   word-break: break-word;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   animation: fadeIn 0.4s cubic-bezier(0.2, 0.5, 0.3, 1);
