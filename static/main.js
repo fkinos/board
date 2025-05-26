@@ -7,14 +7,29 @@ const input = document.querySelector(".input");
 const nicknameInput = document.querySelector(".nickname");
 const button = document.querySelector("button");
 const connectionStatus = document.querySelector("#connection-status");
+const separator = document.querySelector('.separator');
+
+let timerId;
+const messageTimeout = 3000;
 
 // Eventos do WebSocket
 websocket.onopen = () => {
   connectionStatus.textContent = "✅ Conectado";
   connectionStatus.className = "connected";
+  timerId = setTimeout(() => {
+    separator.style.setProperty('display', "block");
+    connectionStatus.setAttribute('aria-hidden', true);
+    connectionStatus.className = "hidden";
+    connectionStatus.style.setProperty('display', "none");
+  }, messageTimeout);
 };
 
 websocket.onclose = () => {
+  clearTimeout(timerId);
+  separator.style.setProperty('display', "none");
+
+  connectionStatus.setAttribute('aria-hidden', false);
+  connectionStatus.style.setProperty('display', "block");
   connectionStatus.textContent = "❌ Desconectado";
   connectionStatus.className = "disconnected";
 };

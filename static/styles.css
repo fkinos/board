@@ -231,6 +231,15 @@ h1 {
   background: var(--primary);
 }
 
+.separator {
+  display: none;
+  color: var(--primary-light);
+}
+
+.hidden {
+  display: none;
+}
+
 @media (max-width: 768px) {
   header {
     padding: 0 15px;
